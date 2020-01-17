@@ -1,0 +1,147 @@
+---
+title: "Lab2"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(here)
+library(janitor)
+library(naniar)
+library(VIM)
+library(skimr)
+library(ggfortify)
+```
+
+1. Load CA pollution burden data
+```{r}
+ca_pb <- read_csv(here("data", "ca_pollution_burden.csv"))
+
+ca_dem <- read_csv(here("data","ca_census_demographics_2010.csv"))
+
+```
+
+2. Data cleaning and wrangling
+```{r}
+#ca_pb
+ca_pb_nopct <- ca_pb %>% 
+  clean_names() %>% 
+  select(-contains("perc")) %>% 
+  select(-contains("pctl")) %>% 
+  select(-latitude, -longitude)
+
+#ca_dem
+ca_dem_clean <- ca_dem %>% 
+  clean_names()
+```
+
+3. PCA 
+
+Look at pollution burden indicators only
+```{r}
+ca_pb_subset <- ca_pb_nopct %>% 
+  select(ozone:solid_waste, asthma:housing_burden)
+
+```
+
+Use the 'prcomp()' function to do the PCA
+```{r, eval = FALSE}
+
+pb_pca <- prcomp(ca_pb_subset, scale = TRUE) 
+#Gives an error because there are missings
+
+```
+
+Exploring missingness
+```{r}
+summary(ca_pb_subset) #Highest is 242 - out of 8000 that's not too many to omit
+
+gg_miss_var(ca_pb_subset) #Shows plot of missings
+
+matrixplot(ca_pb_subset) #Red indicates missing, dark is higher numbers
+matrixplot(ca_pb_subset, sortby = "poverty") #Organizes poverty from high to low
+```
+
+Remove missings
+```{r}
+#Remove (complete case deletion) any observation with ANY NA values (AKA removes entire row)
+
+ca_pb_nona <- ca_pb_subset %>% 
+  drop_na()
+
+#Summarize
+summary(ca_pb_nona)
+
+skim(ca_pb_nona) #Gives a nicer summary
+
+```
+
+Now do PCA:
+```{r}
+my_ca_PCA <- prcomp(ca_pb_nona, scale = TRUE)
+my_ca_PCA 
+
+summary(my_ca_PCA)
+
+biplot(my_ca_PCA) #Kind of messy... 
+
+autoplot(my_ca_PCA, #Autoplot works with ggplot so you can use any of the other customizations
+         colour = NA, 
+         loadings.label = TRUE,
+         loadings.label.size = 3, 
+         loadings.label.colour = "black",
+         loadings.label.repel = TRUE)
+
+#PC1 and PC2 account for ~34% of the variance (makes sense bc we have so many variables)
+#Poverty and education look positively correlated 
+
+```
+
+4. PCA for pollution burden + demographics
+
+Join together ca_dem_clean and ca_pb_nopct
+```{r}
+#Innerjoin - only keep observations from both dataframes that have a match on the other
+#Fulljoin keeps everything whether or not there's a match
+
+ca_df <- ca_dem_clean %>% 
+  inner_join(ca_pb_nopct, by = c("census_tract_number" = "census_tract"))
+
+#Now drop NAs by compelte case deletion:
+ca_nona <- ca_df %>% 
+  drop_na()
+
+```
+
+Make a subset of ca_nona that only includes:
+-white_percent
+-elderly_65_percent
+-pm2_5
+-pesticides
+-traffic
+-asthma
+-cardiovascular_disease
+-poverty
+
+```{r}
+my_sub <- ca_nona %>% 
+  select(white_percent, elderly_65_percent, pm2_5, pesticides, traffic, asthma, cardiovascular_disease, poverty)
+```
+
+Run PCA
+```{r}
+my_dem_PCA <- prcomp(my_sub, scale = TRUE)
+
+autoplot(my_dem_PCA, #Autoplot works with ggplot so you can use any of the other customizations
+         colour = NA, 
+         loadings.label = TRUE,
+         loadings.label.size = 3, 
+         loadings.label.colour = "black",
+         loadings.label.repel = TRUE) +
+  scale_y_continuous(limits = c(-0.05,0.05))+
+  theme_minimal()
+
+```
+
